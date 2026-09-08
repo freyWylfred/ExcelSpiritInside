@@ -1,4 +1,4 @@
-using System.IO;
+﻿using System.IO;
 using System.Net.Http;
 using System.Text;
 using ClosedXML.Excel;
@@ -9,7 +9,12 @@ namespace ExcelSpiritInside
 {
     public partial class Form1 : Form
     {
-        private const string ModelUrl = "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf";
+        private static readonly string[] ModelUrls =
+        {
+            "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+            "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+            "https://huggingface.co/bartowski/Qwen_Qwen3-4B-GGUF/resolve/main/Qwen_Qwen3-4B-Q4_K_M.gguf"
+        };
         private const string ModelFileName = "Qwen3-4B-Q4_K_M.gguf";
 
         public string ExcelPath1 => textBoxExcel1.Text;
@@ -207,47 +212,36 @@ namespace ExcelSpiritInside
             SetBusy(true, "Downloading model...");
 
             var tempPath = modelPath + ".part";
+            var errors = new StringBuilder();
             try
             {
                 using var client = new HttpClient();
                 client.Timeout = Timeout.InfiniteTimeSpan;
-                using var response = await client.GetAsync(ModelUrl, HttpCompletionOption.ResponseHeadersRead);
-                response.EnsureSuccessStatusCode();
+                client.DefaultRequestHeaders.UserAgent.ParseAdd("ExcelSpiritInside/1.1");
 
-                var total = response.Content.Headers.ContentLength ?? -1L;
-                if (total > 0)
+                bool downloaded = false;
+                for (int i = 0; i < ModelUrls.Length && !downloaded; i++)
                 {
-                    progressBarDownload.Style = ProgressBarStyle.Blocks;
-                    progressBarDownload.MarqueeAnimationSpeed = 0;
-                    progressBarDownload.Value = 0;
-                }
-
-                using var httpStream = await response.Content.ReadAsStreamAsync();
-                long read = 0;
-                using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    var buffer = new byte[81920];
-                    int count;
-                    while ((count = await httpStream.ReadAsync(buffer)) > 0)
+                    var url = ModelUrls[i];
+                    try
                     {
-                        await fileStream.WriteAsync(buffer.AsMemory(0, count));
-                        read += count;
-                        if (total > 0)
+                        labelStatus.Text = $"Downloading model (source {i + 1}/{ModelUrls.Length})...";
+                        await DownloadModelFileAsync(client, url, tempPath);
+                        downloaded = true;
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.AppendLine($"- {url}: {ex.Message}");
+                        if (File.Exists(tempPath))
                         {
-                            var percent = (int)(read * 100 / total);
-                            progressBarDownload.Value = Math.Min(percent, progressBarDownload.Maximum);
-                            labelStatus.Text = $"Downloading model... {read / (1024 * 1024)} MB / {total / (1024 * 1024)} MB";
-                        }
-                        else
-                        {
-                            labelStatus.Text = $"Downloading model... {read / (1024 * 1024)} MB";
+                            try { File.Delete(tempPath); } catch { }
                         }
                     }
                 }
 
-                if (total > 0 && read != total)
+                if (!downloaded)
                 {
-                    throw new IOException($"Download incomplete ({read} of {total} bytes).");
+                    throw new IOException("All download sources failed:\r\n" + errors);
                 }
 
                 File.Move(tempPath, modelPath, true);
@@ -269,7 +263,76 @@ namespace ExcelSpiritInside
                 }
                 isModelReady = false;
                 SetBusy(false, "Model download failed.");
-                MessageBox.Show($"Failed to download model: {ex.Message}", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(
+                    $"Failed to download model: {ex.Message}\r\n\r\nIf you are behind a proxy or firewall, allow access to huggingface.co, or manually place the file at:\r\n{modelPath}",
+                    "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private async Task DownloadModelFileAsync(HttpClient client, string url, string tempPath)
+        {
+            using var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new HttpRequestException($"HTTP {(int)response.StatusCode} {response.ReasonPhrase}");
+            }
+
+            var mediaType = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
+            if (mediaType.Contains("html", StringComparison.OrdinalIgnoreCase) || mediaType.Contains("json", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidDataException($"Server returned {mediaType} instead of a model file (possible proxy or rate limit page).");
+            }
+
+            var total = response.Content.Headers.ContentLength ?? -1L;
+            if (total > 0)
+            {
+                progressBarDownload.Style = ProgressBarStyle.Blocks;
+                progressBarDownload.MarqueeAnimationSpeed = 0;
+                progressBarDownload.Value = 0;
+            }
+
+            using var httpStream = await response.Content.ReadAsStreamAsync();
+            long read = 0;
+            bool headerChecked = false;
+            using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                var buffer = new byte[81920];
+                int count;
+                while ((count = await httpStream.ReadAsync(buffer)) > 0)
+                {
+                    if (!headerChecked)
+                    {
+                        if (count < 4)
+                        {
+                            var extra = await httpStream.ReadAsync(buffer.AsMemory(count, buffer.Length - count));
+                            count += extra;
+                        }
+                        headerChecked = true;
+                        if (count < 4 || buffer[0] != (byte)'G' || buffer[1] != (byte)'G' || buffer[2] != (byte)'U' || buffer[3] != (byte)'F')
+                        {
+                            var preview = Encoding.ASCII.GetString(buffer, 0, Math.Min(count, 64)).Replace("\r", " ").Replace("\n", " ");
+                            throw new InvalidDataException($"Response is not a GGUF file (starts with: \"{preview}\").");
+                        }
+                    }
+
+                    await fileStream.WriteAsync(buffer.AsMemory(0, count));
+                    read += count;
+                    if (total > 0)
+                    {
+                        var percent = (int)(read * 100 / total);
+                        progressBarDownload.Value = Math.Min(percent, progressBarDownload.Maximum);
+                        labelStatus.Text = $"Downloading model... {read / (1024 * 1024)} MB / {total / (1024 * 1024)} MB";
+                    }
+                    else
+                    {
+                        labelStatus.Text = $"Downloading model... {read / (1024 * 1024)} MB";
+                    }
+                }
+            }
+
+            if (total > 0 && read != total)
+            {
+                throw new IOException($"Download incomplete ({read} of {total} bytes).");
             }
         }
 
@@ -366,12 +429,52 @@ namespace ExcelSpiritInside
             }
         }
 
+        private static XLWorkbook OpenWorkbookSafe(string path)
+        {
+            if (!File.Exists(path))
+            {
+                throw new FileNotFoundException($"File not found: {path}", path);
+            }
+
+            try
+            {
+                return new XLWorkbook(path);
+            }
+            catch (Exception ex) when (ex is ArgumentOutOfRangeException or KeyNotFoundException or InvalidOperationException or NullReferenceException)
+            {
+                // ClosedXML fails on workbooks with broken relationships (images, comments, drawings)
+                // or out-of-range style indices. Sanitize a temporary copy and retry.
+            }
+
+            var tempDir = Path.Combine(Path.GetTempPath(), "ExcelSpiritInside");
+            Directory.CreateDirectory(tempDir);
+            var tempPath = Path.Combine(tempDir, Guid.NewGuid().ToString("N") + ".xlsx");
+            try
+            {
+                File.Copy(path, tempPath, true);
+                WorkbookSanitizer.Sanitize(tempPath);
+
+                using var ms = new MemoryStream(File.ReadAllBytes(tempPath));
+                return new XLWorkbook(ms);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidDataException(
+                    $"Unable to open '{Path.GetFileName(path)}'. The workbook contains elements ClosedXML cannot read (e.g. broken image or comment links). " +
+                    "Open it in Excel, use 'Save As' to create a new .xlsx, and try again.\r\nDetails: {ex.Message}", ex);
+            }
+            finally
+            {
+                try { File.Delete(tempPath); } catch { }
+            }
+        }
+
         private static List<(string Address, string Value1, string Value2)> CompareSheets(string path1, string path2, string sheetName, out string message)
         {
             var diffs = new List<(string, string, string)>();
 
-            using var wb1 = new XLWorkbook(path1);
-            using var wb2 = new XLWorkbook(path2);
+            using var wb1 = OpenWorkbookSafe(path1);
+            using var wb2 = OpenWorkbookSafe(path2);
 
             if (!wb1.TryGetWorksheet(sheetName, out var ws1))
             {
@@ -512,7 +615,7 @@ namespace ExcelSpiritInside
 
         private static string ReadColumn(string path, string sheetName, string column)
         {
-            using var wb = new XLWorkbook(path);
+            using var wb = OpenWorkbookSafe(path);
             if (!wb.TryGetWorksheet(sheetName, out var ws))
             {
                 throw new InvalidOperationException($"Sheet '{sheetName}' not found.");
