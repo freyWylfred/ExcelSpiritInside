@@ -98,26 +98,113 @@ namespace ExcelSpiritInside
             button.UseVisualStyleBackColor = false;
         }
 
-        private async void Form1_Load(object sender, EventArgs e)
+        private async void Form1_Load(object? sender, EventArgs e)
         {
             await EnsureModelAsync();
         }
 
+        private bool isModelReady;
+        private bool isBusy;
+
+        private static bool IsValidModelFile(string path)
+        {
+            try
+            {
+                var info = new FileInfo(path);
+                if (!info.Exists || info.Length < 100L * 1024 * 1024)
+                {
+                    return false;
+                }
+
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+                var magic = new byte[4];
+                return fs.Read(magic, 0, 4) == 4
+                    && magic[0] == (byte)'G' && magic[1] == (byte)'G' && magic[2] == (byte)'U' && magic[3] == (byte)'F';
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void SetBusy(bool busy, string status)
+        {
+            isBusy = busy;
+            labelStatus.Text = status;
+            UseWaitCursor = busy;
+
+            if (busy)
+            {
+                progressBarDownload.Style = ProgressBarStyle.Marquee;
+                progressBarDownload.MarqueeAnimationSpeed = 30;
+            }
+            else
+            {
+                progressBarDownload.Style = ProgressBarStyle.Blocks;
+                progressBarDownload.MarqueeAnimationSpeed = 0;
+                progressBarDownload.Value = isModelReady ? progressBarDownload.Maximum : 0;
+            }
+
+            buttonBrowse1.Enabled = !busy;
+            buttonBrowse2.Enabled = !busy;
+            buttonCompare.Enabled = !busy;
+            buttonInfer.Enabled = !busy;
+            buttonAsk.Enabled = !busy;
+            buttonOk.Enabled = !busy;
+            textBoxExcel1.Enabled = !busy;
+            textBoxExcel2.Enabled = !busy;
+            textBoxSheet.Enabled = !busy;
+            textBoxColumn.Enabled = !busy;
+            textBoxPrompt.Enabled = !busy;
+            Application.DoEvents();
+        }
+
+        private async Task<bool> EnsureModelReadyForInferenceAsync()
+        {
+            if (isModelReady && IsValidModelFile(ModelPath))
+            {
+                return true;
+            }
+
+            var answer = MessageBox.Show(
+                "The local model is not available yet. Download it now? (about 2.5 GB)",
+                "Excel Spirit Inside", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+            if (answer != DialogResult.Yes)
+            {
+                return false;
+            }
+
+            await EnsureModelAsync();
+            return isModelReady;
+        }
+
         private async Task EnsureModelAsync()
         {
-            var modelPath = ModelPath;
-            if (File.Exists(modelPath))
+            if (isBusy)
             {
+                return;
+            }
+
+            var modelPath = ModelPath;
+            if (IsValidModelFile(modelPath))
+            {
+                isModelReady = true;
                 labelStatus.Text = "Model ready.";
+                progressBarDownload.Style = ProgressBarStyle.Blocks;
                 progressBarDownload.Value = progressBarDownload.Maximum;
                 return;
+            }
+
+            if (File.Exists(modelPath))
+            {
+                try { File.Delete(modelPath); } catch { }
             }
 
             var directory = Path.GetDirectoryName(modelPath)!;
             Directory.CreateDirectory(directory);
 
-            buttonOk.Enabled = false;
-            labelStatus.Text = "Downloading model...";
+            isModelReady = false;
+            SetBusy(true, "Downloading model...");
 
             var tempPath = modelPath + ".part";
             try
@@ -128,13 +215,18 @@ namespace ExcelSpiritInside
                 response.EnsureSuccessStatusCode();
 
                 var total = response.Content.Headers.ContentLength ?? -1L;
-                progressBarDownload.Style = total > 0 ? ProgressBarStyle.Blocks : ProgressBarStyle.Marquee;
+                if (total > 0)
+                {
+                    progressBarDownload.Style = ProgressBarStyle.Blocks;
+                    progressBarDownload.MarqueeAnimationSpeed = 0;
+                    progressBarDownload.Value = 0;
+                }
 
                 using var httpStream = await response.Content.ReadAsStreamAsync();
+                long read = 0;
                 using (var fileStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write, FileShare.None))
                 {
                     var buffer = new byte[81920];
-                    long read = 0;
                     int count;
                     while ((count = await httpStream.ReadAsync(buffer)) > 0)
                     {
@@ -146,13 +238,28 @@ namespace ExcelSpiritInside
                             progressBarDownload.Value = Math.Min(percent, progressBarDownload.Maximum);
                             labelStatus.Text = $"Downloading model... {read / (1024 * 1024)} MB / {total / (1024 * 1024)} MB";
                         }
+                        else
+                        {
+                            labelStatus.Text = $"Downloading model... {read / (1024 * 1024)} MB";
+                        }
                     }
                 }
 
+                if (total > 0 && read != total)
+                {
+                    throw new IOException($"Download incomplete ({read} of {total} bytes).");
+                }
+
                 File.Move(tempPath, modelPath, true);
-                progressBarDownload.Style = ProgressBarStyle.Blocks;
-                progressBarDownload.Value = progressBarDownload.Maximum;
-                labelStatus.Text = "Model ready.";
+
+                if (!IsValidModelFile(modelPath))
+                {
+                    try { File.Delete(modelPath); } catch { }
+                    throw new InvalidDataException("Downloaded file is not a valid GGUF model.");
+                }
+
+                isModelReady = true;
+                SetBusy(false, "Model ready.");
             }
             catch (Exception ex)
             {
@@ -160,14 +267,9 @@ namespace ExcelSpiritInside
                 {
                     try { File.Delete(tempPath); } catch { }
                 }
-                progressBarDownload.Style = ProgressBarStyle.Blocks;
-                progressBarDownload.Value = 0;
-                labelStatus.Text = "Model download failed.";
+                isModelReady = false;
+                SetBusy(false, "Model download failed.");
                 MessageBox.Show($"Failed to download model: {ex.Message}", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                buttonOk.Enabled = true;
             }
         }
 
@@ -199,7 +301,7 @@ namespace ExcelSpiritInside
             Close();
         }
 
-        private void buttonCompare_Click(object sender, EventArgs e)
+        private async void buttonCompare_Click(object sender, EventArgs e)
         {
             if (string.IsNullOrWhiteSpace(textBoxExcel1.Text) || string.IsNullOrWhiteSpace(textBoxExcel2.Text))
             {
@@ -219,9 +321,20 @@ namespace ExcelSpiritInside
                 return;
             }
 
+            if (isBusy)
+            {
+                return;
+            }
+
             try
             {
-                var diffs = CompareSheets(textBoxExcel1.Text, textBoxExcel2.Text, textBoxSheet.Text, out string message);
+                SetBusy(true, "Comparing workbooks...");
+                var path1 = textBoxExcel1.Text;
+                var path2 = textBoxExcel2.Text;
+                var sheet = textBoxSheet.Text;
+                string message = string.Empty;
+                var diffs = await Task.Run(() => CompareSheets(path1, path2, sheet, out message));
+                SetBusy(false, diffs.Count == 0 ? "Comparison done." : $"Comparison done: {diffs.Count} difference(s).");
 
                 if (diffs.Count == 0)
                 {
@@ -240,11 +353,15 @@ namespace ExcelSpiritInside
                     return;
                 }
 
-                WriteDiffWorkbook(diffs, textBoxSheet.Text, saveDialog.FileName);
-                textBoxResult.Text = $"{message}\r\n\r\nDiff saved to: {saveDialog.FileName}";
+                SetBusy(true, "Writing diff workbook...");
+                var output = saveDialog.FileName;
+                await Task.Run(() => WriteDiffWorkbook(diffs, sheet, output));
+                SetBusy(false, "Diff saved.");
+                textBoxResult.Text = $"{message}\r\n\r\nDiff saved to: {output}";
             }
             catch (Exception ex)
             {
+                SetBusy(false, "Comparison failed.");
                 MessageBox.Show($"Comparison failed: {ex.Message}", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -289,8 +406,8 @@ namespace ExcelSpiritInside
                         continue;
                     }
 
-                    var v1 = ws1.Cell(r, c).GetString();
-                    var v2 = ws2.Cell(r, c).GetString();
+                    var v1 = GetCellString(ws1.Cell(r, c));
+                    var v2 = GetCellString(ws2.Cell(r, c));
                     if (!string.Equals(v1, v2, StringComparison.Ordinal))
                     {
                         var address = ws1.Cell(r, c).Address.ToStringRelative();
@@ -326,9 +443,8 @@ namespace ExcelSpiritInside
                 return;
             }
 
-            if (!File.Exists(ModelPath))
+            if (isBusy || !await EnsureModelReadyForInferenceAsync())
             {
-                MessageBox.Show("Model is not downloaded yet.", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -349,22 +465,19 @@ namespace ExcelSpiritInside
                 return;
             }
 
-            buttonInfer.Enabled = false;
-            labelStatus.Text = "Inferring...";
+            SetBusy(true, "Loading model and inferring... this may take a while.");
+            textBoxResult.Text = "Working...";
             try
             {
                 var prompt = $"Analyze the following Excel column '{textBoxColumn.Text.Trim()}' values and summarize their meaning:\r\n{columnText}\r\n\r\nAnswer:";
                 textBoxResult.Text = await InferAsync(prompt);
-                labelStatus.Text = "Inference done.";
+                SetBusy(false, "Inference done.");
             }
             catch (Exception ex)
             {
-                labelStatus.Text = "Inference failed.";
+                textBoxResult.Text = string.Empty;
+                SetBusy(false, "Inference failed.");
                 MessageBox.Show($"Inference failed: {ex.Message}", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                buttonInfer.Enabled = true;
             }
         }
 
@@ -376,28 +489,24 @@ namespace ExcelSpiritInside
                 return;
             }
 
-            if (!File.Exists(ModelPath))
+            if (isBusy || !await EnsureModelReadyForInferenceAsync())
             {
-                MessageBox.Show("Model is not downloaded yet.", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            buttonAsk.Enabled = false;
-            labelStatus.Text = "Thinking...";
+            SetBusy(true, "Loading model and thinking... this may take a while.");
+            textBoxResult.Text = "Working...";
             try
             {
                 var prompt = $"User: {textBoxPrompt.Text.Trim()}\r\nAssistant:";
                 textBoxResult.Text = await InferAsync(prompt);
-                labelStatus.Text = "Done.";
+                SetBusy(false, "Done.");
             }
             catch (Exception ex)
             {
-                labelStatus.Text = "Failed.";
+                textBoxResult.Text = string.Empty;
+                SetBusy(false, "Failed.");
                 MessageBox.Show($"Request failed: {ex.Message}", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-            finally
-            {
-                buttonAsk.Enabled = true;
             }
         }
 
@@ -415,7 +524,7 @@ namespace ExcelSpiritInside
             var sb = new StringBuilder();
             for (int r = 1; r <= lastRow; r++)
             {
-                var value = ws.Cell(r, column).GetString();
+                var value = GetCellString(ws.Cell(r, column));
                 if (!string.IsNullOrWhiteSpace(value))
                 {
                     sb.AppendLine(value);
@@ -424,11 +533,42 @@ namespace ExcelSpiritInside
             return sb.ToString();
         }
 
+        private static string GetCellString(IXLCell cell)
+        {
+            if (cell.IsEmpty())
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                return cell.Value.ToString() ?? string.Empty;
+            }
+            catch
+            {
+                try
+                {
+                    return cell.GetString();
+                }
+                catch
+                {
+                    return string.Empty;
+                }
+            }
+        }
+
         private async Task<string> InferAsync(string prompt)
         {
+            var modelPath = ModelPath;
+            if (!IsValidModelFile(modelPath))
+            {
+                isModelReady = false;
+                throw new FileNotFoundException("The model file is missing or corrupted. Please download it again.", modelPath);
+            }
+
             return await Task.Run(async () =>
             {
-                var parameters = new ModelParams(ModelPath)
+                var parameters = new ModelParams(modelPath)
                 {
                     ContextSize = 4096
                 };
