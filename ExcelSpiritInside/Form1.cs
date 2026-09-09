@@ -391,10 +391,13 @@ namespace ExcelSpiritInside
 
             try
             {
-                SetBusy(true, "Comparing workbooks...");
                 var path1 = textBoxExcel1.Text;
                 var path2 = textBoxExcel2.Text;
                 var sheet = textBoxSheet.Text;
+                FileAccessHelper.EnsureReadable(path1, "Excel File 1");
+                FileAccessHelper.EnsureReadable(path2, "Excel File 2");
+
+                SetBusy(true, "Comparing workbooks...");
                 string message = string.Empty;
                 var diffs = await Task.Run(() => CompareSheets(path1, path2, sheet, out message));
                 SetBusy(false, diffs.Count == 0 ? "Comparison done." : $"Comparison done: {diffs.Count} difference(s).");
@@ -416,8 +419,10 @@ namespace ExcelSpiritInside
                     return;
                 }
 
-                SetBusy(true, "Writing diff workbook...");
                 var output = saveDialog.FileName;
+                FileAccessHelper.EnsureWritable(output, "Diff workbook");
+
+                SetBusy(true, "Writing diff workbook...");
                 await Task.Run(() => WriteDiffWorkbook(diffs, sheet, output));
                 SetBusy(false, "Diff saved.");
                 textBoxResult.Text = $"{message}\r\n\r\nDiff saved to: {output}";
@@ -425,20 +430,22 @@ namespace ExcelSpiritInside
             catch (Exception ex)
             {
                 SetBusy(false, "Comparison failed.");
-                MessageBox.Show($"Comparison failed: {ex.Message}", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(FileAccessHelper.Translate(ex, "Comparison"), "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         private static XLWorkbook OpenWorkbookSafe(string path)
         {
-            if (!File.Exists(path))
-            {
-                throw new FileNotFoundException($"File not found: {path}", path);
-            }
+            FileAccessHelper.EnsureReadable(path, "Excel file");
 
             try
             {
                 return new XLWorkbook(path);
+            }
+            catch (IOException ex) when (FileAccessHelper.IsSharingViolation(ex))
+            {
+                throw new UserFacingException(
+                    $"'{Path.GetFileName(path)}' cannot be opened because it is currently open in another program (typically Excel). Please close it and try again.");
             }
             catch (Exception ex) when (ex is ArgumentOutOfRangeException or KeyNotFoundException or InvalidOperationException or NullReferenceException)
             {
@@ -459,9 +466,9 @@ namespace ExcelSpiritInside
             }
             catch (Exception ex)
             {
-                throw new InvalidDataException(
-                    $"Unable to open '{Path.GetFileName(path)}'. The workbook contains elements ClosedXML cannot read (e.g. broken image or comment links). " +
-                    "Open it in Excel, use 'Save As' to create a new .xlsx, and try again.\r\nDetails: {ex.Message}", ex);
+                throw new UserFacingException(
+                    $"Unable to open '{Path.GetFileName(path)}'. The workbook may be corrupted or contain unsupported elements. " +
+                    $"Open it in Excel, use 'Save As' to create a new .xlsx, and try again.\r\nDetails: {ex.Message}", ex);
             }
             finally
             {
@@ -554,11 +561,12 @@ namespace ExcelSpiritInside
             string columnText;
             try
             {
+                FileAccessHelper.EnsureReadable(textBoxExcel1.Text, "Excel File 1");
                 columnText = ReadColumn(textBoxExcel1.Text, textBoxSheet.Text, textBoxColumn.Text.Trim());
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Failed to read column: {ex.Message}", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(FileAccessHelper.Translate(ex, "Reading column"), "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
@@ -580,7 +588,7 @@ namespace ExcelSpiritInside
             {
                 textBoxResult.Text = string.Empty;
                 SetBusy(false, "Inference failed.");
-                MessageBox.Show($"Inference failed: {ex.Message}", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(FileAccessHelper.Translate(ex, "Inference"), "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -609,7 +617,7 @@ namespace ExcelSpiritInside
             {
                 textBoxResult.Text = string.Empty;
                 SetBusy(false, "Failed.");
-                MessageBox.Show($"Request failed: {ex.Message}", "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(FileAccessHelper.Translate(ex, "Request"), "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 

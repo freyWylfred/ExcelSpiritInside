@@ -14,4 +14,8 @@
     <PackageReference Include="LLamaSharp.Backend.Cpu" Version="0.27.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="TempTests" />
+  </ItemGroup>
+
 </Project>
