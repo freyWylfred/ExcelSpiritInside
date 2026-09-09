@@ -11,6 +11,14 @@ namespace ExcelSpiritInside
     {
         private static readonly string[] ModelUrls =
         {
+            // ModelScope (Alibaba official mirror of Qwen; usually reachable when HF is blocked)
+            "https://modelscope.cn/models/Qwen/Qwen3-4B-GGUF/resolve/master/Qwen3-4B-Q4_K_M.gguf",
+            "https://www.modelscope.cn/models/Qwen/Qwen3-4B-GGUF/resolve/master/Qwen3-4B-Q4_K_M.gguf",
+            // hf-mirror.com (community full mirror of Hugging Face)
+            "https://hf-mirror.com/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+            "https://hf-mirror.com/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
+            "https://hf-mirror.com/bartowski/Qwen_Qwen3-4B-GGUF/resolve/main/Qwen_Qwen3-4B-Q4_K_M.gguf",
+            // Hugging Face original
             "https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
             "https://huggingface.co/unsloth/Qwen3-4B-GGUF/resolve/main/Qwen3-4B-Q4_K_M.gguf",
             "https://huggingface.co/bartowski/Qwen_Qwen3-4B-GGUF/resolve/main/Qwen_Qwen3-4B-Q4_K_M.gguf"
@@ -264,7 +272,7 @@ namespace ExcelSpiritInside
                 isModelReady = false;
                 SetBusy(false, "Model download failed.");
                 MessageBox.Show(
-                    $"Failed to download model: {ex.Message}\r\n\r\nIf you are behind a proxy or firewall, allow access to huggingface.co, or manually place the file at:\r\n{modelPath}",
+                    $"Failed to download model: {ex.Message}\r\n\r\nIf you are behind a proxy or firewall, allow access to modelscope.cn, hf-mirror.com, or huggingface.co, or manually place the file at:\r\n{modelPath}",
                     "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
