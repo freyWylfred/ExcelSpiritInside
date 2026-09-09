@@ -625,6 +625,7 @@ namespace ExcelSpiritInside
             {
                 textBoxResult.Text = string.Empty;
                 SetBusy(false, "Failed.");
+                Program.Log($"[Ask] {ex}");
                 MessageBox.Show(FileAccessHelper.Translate(ex, "Request"), "Excel Spirit Inside", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -687,9 +688,12 @@ namespace ExcelSpiritInside
 
             return await Task.Run(async () =>
             {
+                Program.Log($"[Infer] Loading model: {modelPath}");
                 var parameters = new ModelParams(modelPath)
                 {
-                    ContextSize = 4096
+                    ContextSize = 4096,
+                    GpuLayerCount = 0,
+                    Threads = Math.Max(1, Environment.ProcessorCount / 2)
                 };
 
                 using var weights = LLamaWeights.LoadFromFile(parameters);
@@ -699,14 +703,16 @@ namespace ExcelSpiritInside
                 var inferenceParams = new InferenceParams
                 {
                     MaxTokens = 512,
-                    AntiPrompts = new List<string> { "\nUser:" }
+                    AntiPrompts = new List<string> { "\nUser:", "User:" }
                 };
 
+                Program.Log("[Infer] Starting generation.");
                 var sb = new StringBuilder();
                 await foreach (var token in executor.InferAsync(prompt, inferenceParams))
                 {
                     sb.Append(token);
                 }
+                Program.Log($"[Infer] Completed. {sb.Length} chars generated.");
                 return sb.ToString();
             });
         }
