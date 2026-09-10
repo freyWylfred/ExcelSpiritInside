@@ -36,38 +36,85 @@ namespace ExcelSpiritInside
         {
             InitializeComponent();
             ApplyModernStyle();
+            TryApplyAppIcon();
             Load += Form1_Load;
+        }
+
+        private void TryApplyAppIcon()
+        {
+            try
+            {
+                var exePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+                if (string.IsNullOrEmpty(exePath))
+                {
+                    exePath = Environment.ProcessPath ?? string.Empty;
+                }
+
+                var extracted = string.IsNullOrEmpty(exePath) ? null : Icon.ExtractAssociatedIcon(exePath);
+                if (extracted != null)
+                {
+                    Icon = extracted;
+                    return;
+                }
+
+                var icoPath = Path.Combine(AppContext.BaseDirectory, "app-icon.ico");
+                if (File.Exists(icoPath))
+                {
+                    Icon = new Icon(icoPath);
+                }
+            }
+            catch
+            {
+            }
         }
 
         private void ApplyModernStyle()
         {
-            var background = Color.FromArgb(245, 246, 250);
+            var background = Color.FromArgb(243, 244, 248);
             var surface = Color.White;
-            var text = Color.FromArgb(33, 37, 41);
-            var accent = Color.FromArgb(0, 120, 212);
-            var accentHover = Color.FromArgb(0, 99, 177);
-            var secondary = Color.FromArgb(233, 236, 239);
-            var secondaryText = Color.FromArgb(52, 58, 64);
+            var text = Color.FromArgb(24, 28, 36);
+            var accent = Color.FromArgb(79, 70, 229);
+            var accentHover = Color.FromArgb(67, 56, 202);
+            var secondary = Color.FromArgb(228, 231, 238);
+            var secondaryText = Color.FromArgb(55, 65, 81);
+            var header = Color.FromArgb(17, 24, 39);
             var baseFont = new Font("Segoe UI", 10F, FontStyle.Regular);
 
             Font = baseFont;
             BackColor = background;
             ForeColor = text;
+            DoubleBuffered = true;
 
             StyleControls(Controls, text, surface);
 
-            labelStatus.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
-            labelStatus.ForeColor = Color.FromArgb(108, 117, 125);
+            panelHeader.BackColor = header;
+            labelTitle.Font = new Font("Segoe UI Semibold", 18F, FontStyle.Bold);
+            labelTitle.ForeColor = Color.White;
+            labelSubtitle.Font = new Font("Segoe UI", 9.5F, FontStyle.Regular);
+            labelSubtitle.ForeColor = Color.FromArgb(165, 180, 252);
+            labelSubtitle.Margin = new Padding(0, 4, 0, 0);
 
-            textBoxResult.BackColor = Color.FromArgb(248, 249, 250);
-            textBoxResult.Font = new Font("Consolas", 10F, FontStyle.Regular);
+            labelStatus.Font = new Font("Segoe UI", 9F, FontStyle.Regular);
+            labelStatus.ForeColor = Color.FromArgb(107, 114, 128);
+
+            progressBarDownload.ForeColor = accent;
+
+            textBoxResult.BackColor = surface;
+            textBoxResult.ForeColor = Color.FromArgb(31, 41, 55);
+            textBoxResult.Font = new Font("Cascadia Code", 10F, FontStyle.Regular);
+            if (textBoxResult.Font.Name != "Cascadia Code")
+            {
+                textBoxResult.Font = new Font("Consolas", 10F, FontStyle.Regular);
+            }
+            textBoxResult.BorderStyle = BorderStyle.None;
+            textBoxResult.Padding = new Padding(12);
 
             StyleButton(buttonCompare, accent, accentHover, Color.White);
             StyleButton(buttonInfer, accent, accentHover, Color.White);
             StyleButton(buttonAsk, accent, accentHover, Color.White);
-            StyleButton(buttonOk, accent, accentHover, Color.White);
-            StyleButton(buttonBrowse1, secondary, Color.FromArgb(214, 219, 223), secondaryText);
-            StyleButton(buttonBrowse2, secondary, Color.FromArgb(214, 219, 223), secondaryText);
+            StyleButton(buttonOk, header, Color.FromArgb(31, 41, 55), Color.White);
+            StyleButton(buttonBrowse1, secondary, Color.FromArgb(209, 213, 219), secondaryText);
+            StyleButton(buttonBrowse2, secondary, Color.FromArgb(209, 213, 219), secondaryText);
         }
 
         private static void StyleControls(Control.ControlCollection controls, Color text, Color surface)
@@ -78,12 +125,13 @@ namespace ExcelSpiritInside
                 {
                     case Label label:
                         label.ForeColor = text;
-                        label.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+                        label.Font = new Font("Segoe UI Semibold", 9.5F, FontStyle.Bold);
                         break;
                     case TextBox tb:
                         tb.BorderStyle = BorderStyle.FixedSingle;
                         tb.BackColor = surface;
                         tb.ForeColor = text;
+                        tb.Font = new Font("Segoe UI", 10.5F, FontStyle.Regular);
                         break;
                     case TableLayoutPanel:
                     case FlowLayoutPanel:
@@ -106,9 +154,11 @@ namespace ExcelSpiritInside
             button.FlatAppearance.MouseDownBackColor = hover;
             button.BackColor = back;
             button.ForeColor = fore;
-            button.Font = new Font("Segoe UI Semibold", 10F, FontStyle.Bold);
+            button.Font = new Font("Segoe UI Semibold", 9.75F, FontStyle.Bold);
             button.Cursor = Cursors.Hand;
             button.UseVisualStyleBackColor = false;
+            button.MinimumSize = new Size(button.MinimumSize.Width, 36);
+            button.Padding = new Padding(16, 6, 16, 6);
         }
 
         private async void Form1_Load(object? sender, EventArgs e)

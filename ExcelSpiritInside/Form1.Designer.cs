@@ -31,6 +31,9 @@ namespace ExcelSpiritInside
         private Label labelPrompt;
         private TextBox textBoxPrompt;
         private Button buttonAsk;
+        private Panel panelHeader;
+        private Label labelTitle;
+        private Label labelSubtitle;
 
         /// <summary>
         ///  Clean up any resources being used.
@@ -77,7 +80,11 @@ namespace ExcelSpiritInside
             labelPrompt = new Label();
             textBoxPrompt = new TextBox();
             buttonAsk = new Button();
+            panelHeader = new Panel();
+            labelTitle = new Label();
+            labelSubtitle = new Label();
             layoutRoot.SuspendLayout();
+            panelHeader.SuspendLayout();
             panelOptions.SuspendLayout();
             panelActions.SuspendLayout();
             panelFooter.SuspendLayout();
@@ -91,7 +98,7 @@ namespace ExcelSpiritInside
             layoutRoot.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             layoutRoot.Dock = DockStyle.Fill;
             layoutRoot.Name = "layoutRoot";
-            layoutRoot.Padding = new Padding(16);
+            layoutRoot.Padding = new Padding(24, 20, 24, 20);
             layoutRoot.RowCount = 8;
             layoutRoot.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             layoutRoot.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -323,6 +330,29 @@ namespace ExcelSpiritInside
             buttonOk.Text = "OK";
             buttonOk.Click += buttonOk_Click;
             // 
+            // panelHeader
+            // 
+            panelHeader.Dock = DockStyle.Top;
+            panelHeader.Height = 84;
+            panelHeader.Name = "panelHeader";
+            panelHeader.Padding = new Padding(24, 16, 24, 16);
+            panelHeader.Controls.Add(labelSubtitle);
+            panelHeader.Controls.Add(labelTitle);
+            // 
+            // labelTitle
+            // 
+            labelTitle.AutoSize = true;
+            labelTitle.Dock = DockStyle.Top;
+            labelTitle.Name = "labelTitle";
+            labelTitle.Text = "Excel Spirit Inside";
+            // 
+            // labelSubtitle
+            // 
+            labelSubtitle.AutoSize = true;
+            labelSubtitle.Dock = DockStyle.Top;
+            labelSubtitle.Name = "labelSubtitle";
+            labelSubtitle.Text = "Compare workbooks and ask your local AI — fully offline.";
+            // 
             // openFileDialog
             // 
             openFileDialog.Filter = "Excel Files (*.xlsx;*.xls)|*.xlsx;*.xls|All Files (*.*)|*.*";
@@ -331,12 +361,15 @@ namespace ExcelSpiritInside
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(960, 640);
+            ClientSize = new Size(1000, 700);
             Controls.Add(layoutRoot);
-            MinimumSize = new Size(760, 520);
+            Controls.Add(panelHeader);
+            MinimumSize = new Size(800, 580);
             Name = "Form1";
             StartPosition = FormStartPosition.CenterScreen;
             Text = "Excel Spirit Inside";
+            panelHeader.ResumeLayout(false);
+            panelHeader.PerformLayout();
             layoutRoot.ResumeLayout(false);
             layoutRoot.PerformLayout();
             panelOptions.ResumeLayout(false);
