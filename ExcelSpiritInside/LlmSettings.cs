@@ -39,33 +39,69 @@ namespace ExcelSpiritInside
         private static readonly JsonSerializerOptions JsonOptions = new()
         {
             WriteIndented = true,
-            PropertyNameCaseInsensitive = true,
-            ReadCommentHandling = JsonCommentHandling.Skip,
-            AllowTrailingCommas = true
+            PropertyNameCaseInsensitive = true
         };
 
         public static LlmSettings Load()
         {
             var path = SettingsPath;
+            LlmSettings result;
             try
             {
                 if (!File.Exists(path))
                 {
-                    var defaults = new LlmSettings();
-                    File.WriteAllText(path, JsonSerializer.Serialize(defaults, JsonOptions));
-                    Program.Log($"[Settings] Created default settings at {path}");
-                    return defaults;
+                    result = new LlmSettings();
+                    File.WriteAllText(path, JsonSerializer.Serialize(result, JsonOptions));
+                    Program.Log($"[Settings] File not found. Created default settings at {path}");
                 }
-
-                var loaded = JsonSerializer.Deserialize<LlmSettings>(File.ReadAllText(path), JsonOptions) ?? new LlmSettings();
-                Program.Log($"[Settings] Loaded {path}");
-                return loaded;
+                else
+                {
+                    result = JsonSerializer.Deserialize<LlmSettings>(File.ReadAllText(path), JsonOptions) ?? new LlmSettings();
+                    Program.Log($"[Settings] Loaded {path}");
+                }
             }
             catch (Exception ex)
             {
+                result = new LlmSettings();
                 Program.Log($"[Settings] Failed to load {path}: {ex.Message}. Using defaults.");
-                return new LlmSettings();
             }
+
+            Program.Log("[Settings] Effective values:" + Environment.NewLine + result.Describe());
+            return result;
+        }
+
+        public string Describe()
+        {
+            var effectiveThreads = Threads > 0 ? Threads : Math.Max(1, Environment.ProcessorCount / 2);
+            var lines = new[]
+            {
+                $"  n_gpu_layers      = {GpuLayers}",
+                $"  main_gpu          = {MainGpu}",
+                $"  split_mode        = {SplitMode}",
+                $"  use_mlock         = {UseMlock}",
+                $"  use_mmap          = {UseMmap}",
+                $"  n_ctx             = {ContextSize}",
+                $"  n_batch           = {BatchSize}",
+                $"  n_ubatch          = {UBatchSize}",
+                $"  n_threads         = {Threads} (effective {effectiveThreads})",
+                $"  n_threads_batch   = {BatchThreads} (effective {(BatchThreads > 0 ? BatchThreads : effectiveThreads)})",
+                $"  flash_attention   = {FlashAttention}",
+                $"  seed              = {Seed}",
+                $"  rope_freq_base    = {(RopeFrequencyBase.HasValue ? RopeFrequencyBase.Value.ToString() : "default")}",
+                $"  rope_freq_scale   = {(RopeFrequencyScale.HasValue ? RopeFrequencyScale.Value.ToString() : "default")}",
+                $"  max_tokens        = {MaxTokens}",
+                $"  temperature       = {Temperature}",
+                $"  top_k             = {TopK}",
+                $"  top_p             = {TopP}",
+                $"  min_p             = {MinP}",
+                $"  repeat_penalty    = {RepeatPenalty}",
+                $"  repeat_last_n     = {RepeatLastN}",
+                $"  frequency_penalty = {FrequencyPenalty}",
+                $"  presence_penalty  = {PresencePenalty}",
+                $"  anti_prompts      = [{string.Join(", ", AntiPrompts.Select(a => "\"" + a.Replace("\n", "\\n") + "\""))}]",
+                $"  system_prompt     = \"{SystemPrompt}\""
+            };
+            return string.Join(Environment.NewLine, lines);
         }
 
         public ModelParams ToModelParams(string modelPath)

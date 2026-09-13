@@ -54,7 +54,7 @@ Hidden rows and columns are ignored during comparison.
 
 ## LLM Settings (`llm-settings.json`)
 
-The local model is configured by `llm-settings.json` next to `ExcelSpiritInside.exe`. It is created with defaults on first run and loaded at every startup. Comments and trailing commas are allowed.
+The local model is configured by `llm-settings.json` next to `ExcelSpiritInside.exe`. It is created with defaults on first run and loaded at every startup. The file must be standard JSON (no comments, no trailing commas). The effective values are written to the log on every startup.
 
 | Key | Default | Description |
 |---|---|---|
