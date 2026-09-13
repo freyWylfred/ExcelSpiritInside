@@ -1,0 +1,30 @@
+{
+  // Model loading (llama.cpp)
+  "n_gpu_layers": 0,          // layers offloaded to GPU (0 = CPU only; -1 is not supported, use a large number like 99)
+  "main_gpu": 0,              // GPU index used for small tensors / scratch buffers
+  "split_mode": "none",       // none | layer | row
+  "use_mlock": false,         // lock model in RAM (prevents swapping)
+  "use_mmap": true,           // memory-map the model file
+  "n_ctx": 4096,              // context window (tokens)
+  "n_batch": 512,             // logical batch size for prompt processing
+  "n_ubatch": 512,            // physical batch size
+  "n_threads": 0,             // 0 = auto (half of logical cores)
+  "n_threads_batch": 0,       // 0 = same as n_threads
+  "flash_attention": false,
+  "seed": 1337,
+  "rope_freq_base": null,     // null = model default
+  "rope_freq_scale": null,    // null = model default
+
+  // Sampling / generation
+  "max_tokens": 512,
+  "temperature": 0.7,
+  "top_k": 40,
+  "top_p": 0.9,
+  "min_p": 0.05,
+  "repeat_penalty": 1.1,
+  "repeat_last_n": 64,
+  "frequency_penalty": 0.0,
+  "presence_penalty": 0.0,
+  "anti_prompts": [ "\nUser:", "User:" ],
+  "system_prompt": "You are a helpful assistant for Excel data."
+}

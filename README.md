@@ -52,6 +52,32 @@ Hidden rows and columns are ignored during comparison.
 1. Type any instruction into the **Instruction** box.
 2. Click **Ask** to view the model's response.
 
+## LLM Settings (`llm-settings.json`)
+
+The local model is configured by `llm-settings.json` next to `ExcelSpiritInside.exe`. It is created with defaults on first run and loaded at every startup. Comments and trailing commas are allowed.
+
+| Key | Default | Description |
+|---|---|---|
+| `n_gpu_layers` | `0` | Layers offloaded to GPU (0 = CPU only). Requires a GPU backend package. |
+| `main_gpu` | `0` | GPU index used for scratch buffers. |
+| `split_mode` | `"none"` | `none` / `layer` / `row` for multi-GPU. |
+| `use_mlock` | `false` | Lock model in RAM to prevent swapping. |
+| `use_mmap` | `true` | Memory-map the model file. |
+| `n_ctx` | `4096` | Context window in tokens. |
+| `n_batch` / `n_ubatch` | `512` | Logical / physical batch size. |
+| `n_threads` / `n_threads_batch` | `0` | `0` = auto (half of logical cores). |
+| `flash_attention` | `false` | Enable flash attention. |
+| `seed` | `1337` | Sampling seed. |
+| `rope_freq_base` / `rope_freq_scale` | `null` | RoPE overrides (`null` = model default). |
+| `max_tokens` | `512` | Max generated tokens. |
+| `temperature`, `top_k`, `top_p`, `min_p` | `0.7`, `40`, `0.9`, `0.05` | Sampling controls. |
+| `repeat_penalty`, `repeat_last_n` | `1.1`, `64` | Repetition penalty. |
+| `frequency_penalty`, `presence_penalty` | `0.0` | Additional penalties. |
+| `anti_prompts` | `["\nUser:", "User:"]` | Strings that stop generation. |
+| `system_prompt` | *(see file)* | Prepended to every prompt. |
+
+Invalid or missing files fall back to defaults; details are written to `%LOCALAPPDATA%\ExcelSpiritInside\logs\app.log`.
+
 ## Building from Source
 
 ```powershell

@@ -163,11 +163,13 @@ namespace ExcelSpiritInside
 
         private async void Form1_Load(object? sender, EventArgs e)
         {
+            llmSettings = LlmSettings.Load();
             await EnsureModelAsync();
         }
 
         private bool isModelReady;
         private bool isBusy;
+        private LlmSettings llmSettings = new();
 
         private static bool IsValidModelFile(string path)
         {
@@ -638,7 +640,7 @@ namespace ExcelSpiritInside
             textBoxResult.Text = "Working...";
             try
             {
-                var prompt = $"Analyze the following Excel column '{textBoxColumn.Text.Trim()}' values and summarize their meaning:\r\n{columnText}\r\n\r\nAnswer:";
+                var prompt = $"{llmSettings.SystemPrompt}\r\n\r\nAnalyze the following Excel column '{textBoxColumn.Text.Trim()}' values and summarize their meaning:\r\n{columnText}\r\n\r\nAnswer:";
                 textBoxResult.Text = await InferAsync(prompt);
                 SetBusy(false, "Inference done.");
             }
@@ -667,7 +669,7 @@ namespace ExcelSpiritInside
             textBoxResult.Text = "Working...";
             try
             {
-                var prompt = $"User: {textBoxPrompt.Text.Trim()}\r\nAssistant:";
+                var prompt = $"{llmSettings.SystemPrompt}\r\n\r\nUser: {textBoxPrompt.Text.Trim()}\r\nAssistant:";
                 textBoxResult.Text = await InferAsync(prompt);
                 SetBusy(false, "Done.");
             }
@@ -736,25 +738,17 @@ namespace ExcelSpiritInside
                 throw new FileNotFoundException("The model file is missing or corrupted. Please download it again.", modelPath);
             }
 
+            var settings = llmSettings;
             return await Task.Run(async () =>
             {
-                Program.Log($"[Infer] Loading model: {modelPath}");
-                var parameters = new ModelParams(modelPath)
-                {
-                    ContextSize = 4096,
-                    GpuLayerCount = 0,
-                    Threads = Math.Max(1, Environment.ProcessorCount / 2)
-                };
+                Program.Log($"[Infer] Loading model: {modelPath} (ctx={settings.ContextSize}, gpu_layers={settings.GpuLayers}, threads={settings.Threads})");
+                var parameters = settings.ToModelParams(modelPath);
 
                 using var weights = LLamaWeights.LoadFromFile(parameters);
                 using var context = weights.CreateContext(parameters);
                 var executor = new InteractiveExecutor(context);
 
-                var inferenceParams = new InferenceParams
-                {
-                    MaxTokens = 512,
-                    AntiPrompts = new List<string> { "\nUser:", "User:" }
-                };
+                var inferenceParams = settings.ToInferenceParams();
 
                 Program.Log("[Infer] Starting generation.");
                 var sb = new StringBuilder();
