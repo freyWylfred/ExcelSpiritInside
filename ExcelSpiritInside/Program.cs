@@ -21,10 +21,32 @@ namespace ExcelSpiritInside
                 e.SetObserved();
             };
 
+            ConfigureNativeLogging();
+
             // To customize application configuration such as set high DPI settings or default font,
             // see https://aka.ms/applicationconfiguration.
             ApplicationConfiguration.Initialize();
             Application.Run(new Form1());
+        }
+
+        private static void ConfigureNativeLogging()
+        {
+            try
+            {
+                LLama.Native.NativeLibraryConfig.All.WithLogCallback((level, message) =>
+                    Log($"[native-lib:{level}] {message.TrimEnd()}"));
+                LLama.Native.NativeLogConfig.llama_log_set((level, message) =>
+                {
+                    if (level is LLama.Native.LLamaLogLevel.Warning or LLama.Native.LLamaLogLevel.Error)
+                    {
+                        Log($"[llama:{level}] {message.TrimEnd()}");
+                    }
+                });
+            }
+            catch (Exception ex)
+            {
+                Log($"[native-lib] Failed to configure native logging: {ex.Message}");
+            }
         }
 
         public static void Log(string message)

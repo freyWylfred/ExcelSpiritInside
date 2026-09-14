@@ -744,20 +744,37 @@ namespace ExcelSpiritInside
                 Program.Log($"[Infer] Loading model: {modelPath} (ctx={settings.ContextSize}, gpu_layers={settings.GpuLayers}, threads={settings.Threads})");
                 var parameters = settings.ToModelParams(modelPath);
 
-                using var weights = LLamaWeights.LoadFromFile(parameters);
-                using var context = weights.CreateContext(parameters);
-                var executor = new InteractiveExecutor(context);
-
-                var inferenceParams = settings.ToInferenceParams();
-
-                Program.Log("[Infer] Starting generation.");
-                var sb = new StringBuilder();
-                await foreach (var token in executor.InferAsync(prompt, inferenceParams))
+                LLamaWeights weights;
+                try
                 {
-                    sb.Append(token);
+                    weights = LLamaWeights.LoadFromFile(parameters);
                 }
-                Program.Log($"[Infer] Completed. {sb.Length} chars generated.");
-                return sb.ToString();
+                catch (LLama.Exceptions.LoadWeightsFailedException ex)
+                {
+                    var size = new FileInfo(modelPath).Length;
+                    Program.Log($"[Infer] Model load failed. File size={size:N0} bytes. See [llama:*] lines above for the native reason.");
+                    throw new InvalidOperationException(
+                        $"{ex.Message}\r\n\r\nThe file may be incomplete or incompatible with this llama.cpp build. " +
+                        $"Check the native error in the log:\r\n{Program.LogPath}\r\n\r\n" +
+                        $"To re-download, delete the file and restart the app.", ex);
+                }
+
+                using (weights)
+                using (var context = weights.CreateContext(parameters))
+                {
+                    var executor = new InteractiveExecutor(context);
+
+                    var inferenceParams = settings.ToInferenceParams();
+
+                    Program.Log("[Infer] Starting generation.");
+                    var sb = new StringBuilder();
+                    await foreach (var token in executor.InferAsync(prompt, inferenceParams))
+                    {
+                        sb.Append(token);
+                    }
+                    Program.Log($"[Infer] Completed. {sb.Length} chars generated.");
+                    return sb.ToString();
+                }
             });
         }
 

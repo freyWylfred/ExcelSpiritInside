@@ -113,14 +113,19 @@ namespace ExcelSpiritInside
                 BatchSize = BatchSize,
                 UBatchSize = UBatchSize,
                 GpuLayerCount = GpuLayers,
-                MainGpu = MainGpu,
-                SplitMode = ParseSplitMode(SplitMode),
                 UseMemorymap = UseMmap,
                 UseMemoryLock = UseMlock,
                 Threads = threads,
                 BatchThreads = BatchThreads > 0 ? BatchThreads : threads,
                 FlashAttention = FlashAttention
             };
+            // llama.cpp validates main_gpu against the available GPU devices when a split mode is set.
+            // With the CPU backend there are 0 devices, so only pass GPU placement when GPU offload is requested.
+            if (GpuLayers > 0)
+            {
+                p.MainGpu = MainGpu;
+                p.SplitMode = ParseSplitMode(SplitMode);
+            }
             if (RopeFrequencyBase.HasValue) p.RopeFrequencyBase = RopeFrequencyBase;
             if (RopeFrequencyScale.HasValue) p.RopeFrequencyScale = RopeFrequencyScale;
             return p;

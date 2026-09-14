@@ -29,3 +29,7 @@ packages/
 
 ## Test artifacts
 *.log
+
+## Local build/publish output and scratch
+publish/
+TempTests/
